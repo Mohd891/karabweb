@@ -998,3 +998,566 @@
       renderFarms();
       computeOptimalRoute();
       updateSustainabilityKPIs();
+    }
+
+    function computeOptimalRoute() {
+      const stopsCount = document.getElementById('route-stops-count');
+      const metricDist = document.getElementById('metric-distance');
+      const metricTime = document.getElementById('metric-time');
+      const metricWeight = document.getElementById('metric-weight');
+      const metricFuel = document.getElementById('metric-fuel');
+      const truckCounter = document.getElementById('truck-capacity-counter');
+      const dispatchBtn = document.getElementById('dispatch-btn');
+      const completeBtn = document.getElementById('complete-pickup-btn');
+
+      if (selectedFarmIds.length === 0) {
+        stopsCount.innerText = '0 محطات';
+        metricDist.innerText = '0 كم';
+        metricTime.innerText = '0 دقيقة';
+        metricWeight.innerText = '0 طن';
+        metricFuel.innerText = '0%';
+        truckCounter.innerText = '0 طن / 10 طن';
+        dispatchBtn.disabled = true;
+        dispatchBtn.className = "w-full py-3.5 bg-gray-200 text-gray-400 font-extrabold text-sm rounded-xl transition flex items-center justify-center gap-2 cursor-not-allowed";
+        completeBtn.classList.add('hidden');
+        updateMapDisplay([]);
+        return;
+      }
+
+      let remainingFarms = farmsData.filter(f => selectedFarmIds.includes(f.id) && f.status !== 'completed');
+      let currentPoint = {
+        name: currentActiveFactory.name,
+        lat: currentActiveFactory.lat,
+        lng: currentActiveFactory.lng
+      };
+
+      let orderedPath = [];
+      let totalDistance = 0;
+      let totalWeight = 0;
+
+      while (remainingFarms.length > 0) {
+        let nearestIndex = 0;
+        let shortestDist = calcDistance(currentPoint, remainingFarms[0]);
+
+        for (let i = 1; i < remainingFarms.length; i++) {
+          const d = calcDistance(currentPoint, remainingFarms[i]);
+          if (d < shortestDist) {
+            shortestDist = d;
+            nearestIndex = i;
+          }
+        }
+
+        const nextStop = remainingFarms[nearestIndex];
+        const roadDistance = shortestDist * 1.15;
+        totalDistance += roadDistance;
+        totalWeight += nextStop.weight;
+
+        orderedPath.push({
+          farm: nextStop,
+          legDistance: roadDistance
+        });
+
+        currentPoint = nextStop;
+        remainingFarms.splice(nearestIndex, 1);
+      }
+
+      const returnRoadDist = calcDistance(currentPoint, currentActiveFactory) * 1.15;
+      totalDistance += returnRoadDist;
+
+      updateMapDisplay(orderedPath);
+
+      stopsCount.innerText = `${orderedPath.length} محطات مختارة`;
+
+      const totalTimeMin = Math.round((totalDistance / 40) * 60 + (orderedPath.length * 20));
+      metricDist.innerText = `${totalDistance.toFixed(1)} كم`;
+      metricTime.innerText = `${Math.floor(totalTimeMin / 60)} س و ${totalTimeMin % 60} د`;
+      metricWeight.innerText = `${totalWeight.toFixed(1)} طن`;
+      truckCounter.innerText = `${totalWeight.toFixed(1)} طن / 10 طن`;
+      
+      const fuelSaved = Math.min(42, Math.round(18 + orderedPath.length * 6));
+      metricFuel.innerText = `${fuelSaved}%`;
+
+      dispatchBtn.disabled = false;
+      dispatchBtn.className = "w-full py-3.5 bg-brand-gold hover:bg-brand-goldHover text-brand-green font-extrabold text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer";
+      
+      completeBtn.classList.remove('hidden');
+      completeBtn.disabled = false;
+    }
+
+    function dispatchTruck() {
+      if (selectedFarmIds.length === 0) return;
+
+      let acceptedNames = [];
+      let etaMinutes = 20;
+
+      farmsData.forEach(farm => {
+        if (selectedFarmIds.includes(farm.id)) {
+          farm.status = 'accepted';
+          farm.acceptedBy = currentActiveFactory.name;
+          farm.eta = `${etaMinutes} دقيقة`;
+          acceptedNames.push(farm.name);
+          etaMinutes += 25;
+        }
+      });
+
+      const notifBox = document.getElementById('farmer-accepted-notification');
+      notifBox.classList.remove('hidden');
+      document.getElementById('notification-text').innerHTML = `قام <strong>${currentActiveFactory.name}</strong> بقبول طلبك وجدولته ضمن أفضل مسار لتحميل السعف والكرب.`;
+      document.getElementById('notification-eta').innerHTML = `⏱️ زمن الوصول المتوقع لمزرعتك: <strong>حوالي 25 دقيقة</strong>.`;
+
+      renderFarms();
+      renderFarmerOrders();
+      alert(`🚚 تم اعتماد المسار وقبول طلبات المزارع بنجاح!\n• تم تحديد أقصر الطرق الزراعية على الخريطة مباشرة.\n• تم إرسال إشعار فوري وتوقيت الوصول المتوقع للمزارع.`);
+    }
+
+    // Complete Pickup: Automatically updates environmental report metrics
+    function completeCurrentPickups() {
+      if (selectedFarmIds.length === 0) return;
+
+      const completedNow = farmsData.filter(f => selectedFarmIds.includes(f.id));
+      let addedWeight = 0;
+
+      completedNow.forEach(f => {
+        f.status = 'completed';
+        addedWeight += f.weight;
+        completedPickups.push({
+          ...f,
+          completedAt: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
+          factoryName: currentActiveFactory.name
+        });
+      });
+
+      // Update Sustainability Metrics
+      totalWasteCollected += addedWeight;
+      totalCarbonReduced += (addedWeight * 1.36); // 1.36 Ton CO2 avoided per ton of palm waste not burned
+      totalFuelSaved += Math.round(addedWeight * 10.5); // Approx 10.5 L fuel optimized per full delivery load
+      
+      updateSustainabilityKPIs();
+
+      selectedFarmIds = [];
+      renderFarms();
+      renderCompletedPickups();
+      renderFarmerOrders();
+      computeOptimalRoute();
+
+      alert(`✅ تم إتمام استلام ونقل المخلفات بنجاح!\n• تم تحويل المزارع المكتملة إلى "قائمة المزارع التي تم الاستلام منها".\n• تم تحديث تقرير خفض الكربون والاستدامة لمصنعك تلقائياً (+${addedWeight.toFixed(1)} طن).`);
+    }
+
+    // Update KPIs on screen
+    function updateSustainabilityKPIs() {
+      document.getElementById('kpi-carbon-saved').innerText = totalCarbonReduced.toFixed(1);
+      document.getElementById('kpi-waste-saved').innerText = totalWasteCollected.toFixed(1);
+      document.getElementById('kpi-fuel-saved').innerText = totalFuelSaved;
+      document.getElementById('kpi-trees-equiv').innerText = Math.round(totalCarbonReduced * 45.5); // ~45 trees/yr per ton CO2
+
+      // Update modal values too
+      document.getElementById('modal-factory-name').innerText = currentActiveFactory.name;
+      document.getElementById('modal-waste-ton').innerText = `${totalWasteCollected.toFixed(1)} طن`;
+      document.getElementById('modal-co2-ton').innerText = `${totalCarbonReduced.toFixed(1)} طن CO₂e`;
+      document.getElementById('modal-fuel-liters').innerText = `${totalFuelSaved} لتر ديزل`;
+      document.getElementById('modal-trees').innerText = `${Math.round(totalCarbonReduced * 45.5)} شجرة سنوية`;
+      document.getElementById('modal-report-date').innerText = new Date().toLocaleDateString('ar-SA', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+
+    // Open & Close Modal Report
+    function openSustainabilityModal() {
+      updateSustainabilityKPIs();
+      document.getElementById('sustainability-modal').classList.remove('hidden');
+    }
+
+    function closeSustainabilityModal() {
+      document.getElementById('sustainability-modal').classList.add('hidden');
+    }
+
+    function renderCompletedPickups() {
+      const container = document.getElementById('completed-pickups-list');
+      const badge = document.getElementById('completed-pickups-badge');
+      badge.innerText = `${completedPickups.length} مزارع`;
+
+      if (completedPickups.length === 0) {
+        container.innerHTML = `<p class="text-gray-400 italic py-2">لا توجد مزارع تم إنهاء استلامها في هذه الجولة بعد.</p>`;
+        return;
+      }
+
+      container.innerHTML = completedPickups.map(item => `
+        <div class="flex items-center justify-between p-2.5 bg-emerald-50 rounded-xl border border-emerald-200">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-check-circle text-emerald-600"></i>
+            <div>
+              <p class="font-bold text-brand-green">${item.name}</p>
+              <p class="text-[10px] text-gray-500">${item.wasteTitle} • ${item.weight} طن • استلمها ${item.factoryName}</p>
+              <p class="text-[10px] text-gray-400">تاريخ الرفع: ${item.requestedAtDate} (${item.requestedAtTime})</p>
+            </div>
+          </div>
+          <span class="text-[10px] bg-white text-emerald-800 font-bold px-2 py-0.5 rounded border border-emerald-200">
+            تم الاستلام الساعة ${item.completedAt}
+          </span>
+        </div>
+      `).join('');
+    }
+
+    function renderFarmerOrders() {
+      const currentContainer = document.getElementById('current-orders-list');
+      const prevContainer = document.getElementById('previous-orders-list');
+      const currentBadge = document.getElementById('current-orders-badge');
+      const prevBadge = document.getElementById('previous-orders-badge');
+
+      const currentOrders = farmsData.filter(f => f.status !== 'completed');
+      const prevOrders = completedPickups;
+
+      currentBadge.innerText = `${currentOrders.length} طلب نشط`;
+      prevBadge.innerText = `${prevOrders.length} طلب`;
+
+      if (currentOrders.length === 0) {
+        currentContainer.innerHTML = `<p class="text-xs text-gray-400 italic py-2">لا توجد طلبات جارية حالياً.</p>`;
+      } else {
+        currentContainer.innerHTML = currentOrders.map(order => `
+          <div class="p-3 bg-brand-beigeLight rounded-2xl border border-brand-gold/30 flex items-center justify-between">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-xs text-brand-green">${order.name}</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full font-bold ${order.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">
+                  ${order.status === 'accepted' ? 'تم القبول وجاري التوجه' : 'قيد انتظار قبول المصنع'}
+                </span>
+              </div>
+              <p class="text-[11px] text-gray-500 mt-1">${order.wasteTitle} • الوزن التقريبي: ${order.weight} طن</p>
+              <p class="text-[10px] text-gray-400">تاريخ ووقت الرفع: ${order.requestedAtDate} - ${order.requestedAtTime}</p>
+              ${order.status === 'accepted' ? `<p class="text-[11px] font-bold text-brand-gold mt-1">🚚 ${order.acceptedBy} - موعد الوصول: ${order.eta}</p>` : ''}
+            </div>
+            <span class="text-xs font-bold text-brand-green bg-white px-2 py-1 rounded-lg border">
+              ${order.requestedAtDate}
+            </span>
+          </div>
+        `).join('');
+      }
+
+      if (prevOrders.length === 0) {
+        prevContainer.innerHTML = `<p class="text-xs text-gray-400 italic py-2">لا توجد طلبات سابقة مكتملة حتى الآن.</p>`;
+      } else {
+        prevContainer.innerHTML = prevOrders.map(order => `
+          <div class="p-3 bg-gray-50 rounded-2xl border border-gray-200 flex items-center justify-between opacity-80">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-xs text-gray-700">${order.name}</span>
+                <span class="text-[10px] bg-gray-200 text-gray-700 px-2 py-0.5 rounded font-bold">مكتمل</span>
+              </div>
+              <p class="text-[11px] text-gray-500 mt-1">${order.wasteTitle} (${order.weight} طن) • تم الشحن لمصنع ${order.factoryName}</p>
+              <p class="text-[10px] text-gray-400">تاريخ الرفع: ${order.requestedAtDate} (${order.requestedAtTime})</p>
+            </div>
+            <span class="text-[10px] text-emerald-700 font-bold">
+              ✓ تم الاستلام
+            </span>
+          </div>
+        `).join('');
+      }
+    }
+
+    function switchFarmerInnerTab(tab) {
+      const newBtn = document.getElementById('farmer-tab-new');
+      const ordersBtn = document.getElementById('farmer-tab-orders');
+      const newPanel = document.getElementById('farmer-new-request-panel');
+      const ordersPanel = document.getElementById('farmer-orders-panel');
+
+      if (tab === 'new') {
+        newBtn.className = "py-2.5 rounded-xl font-bold text-xs bg-brand-green text-white shadow transition";
+        ordersBtn.className = "py-2.5 rounded-xl font-bold text-xs text-brand-green hover:bg-brand-beige transition";
+        newPanel.classList.remove('hidden');
+        ordersPanel.classList.add('hidden');
+        setTimeout(() => { if (farmerMapInstance) farmerMapInstance.invalidateSize(); }, 150);
+      } else {
+        ordersBtn.className = "py-2.5 rounded-xl font-bold text-xs bg-brand-green text-white shadow transition";
+        newBtn.className = "py-2.5 rounded-xl font-bold text-xs text-brand-green hover:bg-brand-beige transition";
+        newPanel.classList.add('hidden');
+        ordersPanel.classList.remove('hidden');
+        renderFarmerOrders();
+      }
+    }
+
+    function submitFarmerRequest() {
+      const manualWeight = document.getElementById('farmer-manual-weight').value;
+      const finalWeight = manualWeight ? parseFloat(manualWeight) : 3.4;
+
+      const now = new Date();
+      const currentDateStr = now.toLocaleDateString('ar-SA');
+      const currentTimeStr = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+
+      const newOrder = {
+        id: 'farm_' + (farmsData.length + 1),
+        name: 'مزرعة أبو عبد الله - نخل القارة',
+        location: selectedFarmerLocation.text,
+        wasteType: 'سعف',
+        wasteTitle: 'سعف وكرب نخل طازج',
+        weight: finalWeight,
+        lat: selectedFarmerLocation.lat,
+        lng: selectedFarmerLocation.lng,
+        status: 'pending',
+        acceptedBy: null,
+        eta: null,
+        requestedAtDate: currentDateStr,
+        requestedAtTime: currentTimeStr
+      };
+
+      farmsData.unshift(newOrder);
+      renderFarms();
+      renderFarmerOrders();
+
+      alert(`✅ تم رفع طلبك بنجاح لمنصة كَرَب!\n• الوقت المسجل للطلب: ${currentDateStr} - ${currentTimeStr}\n• الوزن المعتمد: ${finalWeight} طن\n• الموقع: تم تحديد إحداثيات البوابة بدقة على الخريطة.\n• الطلب مدرج الآن في (الطلبات الحالية) وسيتم إشعارك فور قبول المصنع.`);
+      switchFarmerInnerTab('orders');
+    }
+
+    function selectLoginRole(role) {
+      const farmerBtn = document.getElementById('role-farmer-btn');
+      const factoryBtn = document.getElementById('role-factory-btn');
+      const farmerBox = document.getElementById('farmer-login-box');
+      const factoryBox = document.getElementById('factory-login-box');
+
+      if (role === 'farmer') {
+        farmerBtn.className = "py-2.5 px-3 rounded-xl font-bold text-xs text-white bg-brand-green shadow transition flex items-center justify-center gap-1.5";
+        factoryBtn.className = "py-2.5 px-3 rounded-xl font-bold text-xs text-brand-green hover:bg-brand-beige transition flex items-center justify-center gap-1.5";
+        farmerBox.classList.remove('hidden');
+        factoryBox.classList.add('hidden');
+      } else {
+        factoryBtn.className = "py-2.5 px-3 rounded-xl font-bold text-xs text-white bg-brand-green shadow transition flex items-center justify-center gap-1.5";
+        farmerBtn.className = "py-2.5 px-3 rounded-xl font-bold text-xs text-brand-green hover:bg-brand-beige transition flex items-center justify-center gap-1.5";
+        factoryBox.classList.remove('hidden');
+        farmerBox.classList.add('hidden');
+      }
+    }
+
+    function simulateLogin(type) {
+      switchView(type);
+    }
+
+    function switchView(viewName) {
+      document.getElementById('view-login').classList.add('hidden');
+      document.getElementById('view-farmer').classList.add('hidden');
+      document.getElementById('view-whatsapp').classList.add('hidden');
+      document.getElementById('view-factory').classList.add('hidden');
+
+      ['login', 'farmer', 'whatsapp', 'factory'].forEach(tab => {
+        const btn = document.getElementById(`btn-tab-${tab}`);
+        if(btn) {
+          btn.classList.remove('active-nav');
+          btn.classList.add('text-brand-beige/70');
+        }
+      });
+
+      document.getElementById(`view-${viewName}`).classList.remove('hidden');
+      const activeBtn = document.getElementById(`btn-tab-${viewName}`);
+      if(activeBtn) {
+        activeBtn.classList.add('active-nav');
+        activeBtn.classList.remove('text-brand-beige/70');
+      }
+
+      if (viewName === 'factory') {
+        setTimeout(() => {
+          if (!mapInstance) initMap();
+          mapInstance.invalidateSize();
+          updateSustainabilityKPIs();
+        }, 150);
+      } else if (viewName === 'farmer') {
+        setTimeout(() => {
+          if (!farmerMapInstance) initFarmerMap();
+          farmerMapInstance.invalidateSize();
+        }, 150);
+      }
+    }
+
+    function filterWaste(type) {
+      document.querySelectorAll('#flt-all, #flt-saaf, #flt-karab').forEach(b => {
+        b.className = "px-3.5 py-1.5 rounded-xl text-xs font-bold bg-gray-100 text-gray-700 hover:bg-brand-beige transition";
+      });
+      if(type === 'all') document.getElementById('flt-all').className = "px-3.5 py-1.5 rounded-xl text-xs font-bold bg-brand-green text-white transition";
+      if(type === 'سعف') document.getElementById('flt-saaf').className = "px-3.5 py-1.5 rounded-xl text-xs font-bold bg-brand-green text-white transition";
+      if(type === 'كرب') document.getElementById('flt-karab').className = "px-3.5 py-1.5 rounded-xl text-xs font-bold bg-brand-green text-white transition";
+      renderFarms(type);
+    }
+
+    function simulateAICamera() {
+      const box = document.getElementById('camera-box');
+      box.innerHTML = `<p class="text-xs font-bold text-brand-green"><i class="fa-solid fa-spinner fa-spin ml-1 text-brand-gold"></i> جاري التعرف على نوع المخلفات وتقدير الكمية...</p>`;
+      setTimeout(() => {
+        document.getElementById('ai-result-card').classList.remove('hidden');
+        box.innerHTML = `<p class="text-xs font-bold text-emerald-800"><i class="fa-solid fa-check ml-1"></i> تم التقاط الصورة وتحليلها بالذكاء الاصطناعي</p>`;
+      }, 1000);
+    }
+
+    // WhatsApp Bot Simulation Logic
+    let waStep = 0;
+    function appendWaMessage(sender, content, extraClass = '') {
+      const chatBox = document.getElementById('whatsapp-chat-box');
+      const timeStr = new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+      const msgDiv = document.createElement('div');
+
+      if (sender === 'user') {
+        msgDiv.className = "flex flex-col items-end mr-auto max-w-[85%]";
+        msgDiv.innerHTML = `
+          <div class="bg-[#DCF8C6] p-2.5 rounded-2xl rounded-tl-none shadow-sm text-gray-800">
+            ${content}
+            <span class="text-[9px] text-gray-400 float-left mt-1 mr-2">${timeStr} ✓✓</span>
+          </div>
+        `;
+      } else {
+        msgDiv.className = "flex flex-col items-start max-w-[85%]";
+        msgDiv.innerHTML = `
+          <div class="bg-white p-3 rounded-2xl rounded-tr-none shadow-sm text-gray-800 ${extraClass}">
+            ${content}
+            <span class="text-[9px] text-gray-400 float-left mt-1 mr-2">${timeStr}</span>
+          </div>
+        `;
+      }
+      chatBox.appendChild(msgDiv);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function restartWhatsAppDemo() {
+      waStep = 0;
+      const chatBox = document.getElementById('whatsapp-chat-box');
+      chatBox.innerHTML = `
+        <div class="text-center my-1">
+          <span class="bg-[#FFEECD] text-gray-600 text-[10px] px-3 py-1 rounded-md shadow-sm">
+            🔒 محادثة تفاعلية مباشرة مع نظام كَرَب لرفع طلب الجمع
+          </span>
+        </div>
+      `;
+      document.getElementById('wa-action-hint').innerText = "اضغط أدناه لبدء المحادثة كصاحب مزرعة:";
+      const btn = document.getElementById('wa-next-step-btn');
+      btn.innerHTML = `<span>إرسال رسالة: "السلام عليكم، عندي مخلفات نخل أبي أرفع طلب جمع" 💬</span>`;
+      btn.className = "w-full py-2.5 bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-xs rounded-xl shadow transition flex items-center justify-center gap-2";
+    }
+
+    function nextWhatsAppStep() {
+      const btn = document.getElementById('wa-next-step-btn');
+      const hint = document.getElementById('wa-action-hint');
+
+      if (waStep === 0) {
+        appendWaMessage('user', `<p class="font-bold text-brand-green">السلام عليكم، عندي مخلفات نخل في المزرعة وأبي أرفع طلب جمع للمصانع.</p>`);
+        btn.disabled = true;
+        hint.innerText = "جاري كتابة الرد من البوت...";
+
+        setTimeout(() => {
+          appendWaMessage('bot', `
+            <p class="font-bold text-brand-green mb-1">وعليكم السلام ورحمة الله وبركاته، حياك الله في منصة كَرَب 🌴</p>
+            <p>أبشر ونسعد بخدمتك. بنسألك 3 أسئلة بسيطة ونرفع الطلب مباشرة للمصانع المعنية.</p>
+          `);
+
+          setTimeout(() => {
+            appendWaMessage('bot', `
+              <p class="font-bold text-brand-green">السؤال الأول:</p>
+              <p>وش نوع المخلفات الموجودة بالمزرعة حالياً؟ (سعف، كرب وجذوع، أو عذوق؟)</p>
+            `);
+            btn.disabled = false;
+            hint.innerText = "حدد إجابتك على السؤال الأول:";
+            btn.innerHTML = `<span>إرسال: "المخلفات عبارة عن سعف نخل طازج" 🌿</span>`;
+            waStep = 1;
+          }, 700);
+        }, 800);
+      } 
+      else if (waStep === 1) {
+        appendWaMessage('user', `<p>المخلفات عبارة عن سعف نخل طازج ناتج من صرام النخيل الدوري.</p>`);
+        btn.disabled = true;
+        hint.innerText = "جاري كتابة الرد من البوت...";
+
+        setTimeout(() => {
+          appendWaMessage('bot', `
+            <p class="font-bold text-brand-green">السؤال الثاني:</p>
+            <p>كم الوزن أو الحجم التقريبي للكمية؟ (مثلاً: 2 طن، حمولة دينة، أو 3.5 طن تقريباً؟)</p>
+          `);
+          btn.disabled = false;
+          hint.innerText = "حدد إجابتك على السؤال الثاني:";
+          btn.innerHTML = `<span>إرسال: "الوزن تقريباً 3.5 طن (شاحنة متوسطة)" ⚖️</span>`;
+          waStep = 2;
+        }, 800);
+      }
+      else if (waStep === 2) {
+        appendWaMessage('user', `<p>الوزن تقريباً 3.5 طن (حوالي حمولة شاحنة متوسطة).</p>`);
+        btn.disabled = true;
+        hint.innerText = "جاري كتابة الرد من البوت...";
+
+        setTimeout(() => {
+          appendWaMessage('bot', `
+            <p class="font-bold text-brand-green">السؤال الثالث والأخير:</p>
+            <p>فضلاً أرسل لي **لوكيشن المزرعة (Location Pin)** من علامة المرفقات بالأسفل لتوجيه الشاحنة لبوابتك بدقة 📍</p>
+          `);
+          btn.disabled = false;
+          hint.innerText = "إرسال الموقع الجغرافي:";
+          btn.innerHTML = `<span>إرسال: مشاركة موقع المزرعة 📍 (قرية الفضلية، الأحساء)</span>`;
+          waStep = 3;
+        }, 800);
+      }
+      else if (waStep === 3) {
+        appendWaMessage('user', `
+          <div class="bg-gray-200 h-24 w-44 rounded-lg mb-1 flex flex-col items-center justify-center text-gray-700 relative overflow-hidden">
+            <i class="fa-solid fa-map-location-dot text-2xl text-red-600"></i>
+            <span class="text-[10px] font-bold mt-1">موقع مزرعة الفضلية، الأحساء</span>
+          </div>
+          <p class="text-xs font-semibold">📍 تم إرسال الموقع الحالي للبوابة</p>
+        `);
+        btn.disabled = true;
+        hint.innerText = "يقوم البوت الآن برفع الطلب تلقائياً إلى منصة كَرَب...";
+
+        setTimeout(() => {
+          const now = new Date();
+          const currentDateStr = now.toLocaleDateString('ar-SA');
+          const currentTimeStr = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+
+          const botOrder = {
+            id: 'farm_' + (farmsData.length + 1),
+            name: 'مزرعة الواتساب - نخل الفضلية',
+            location: 'قرية الفضلية - طريق الواحة الداخلي (مرفوع عبر الواتساب)',
+            wasteType: 'سعف',
+            wasteTitle: 'سعف نخل طازج',
+            weight: 3.5,
+            lat: 25.3780,
+            lng: 49.7150,
+            status: 'pending',
+            acceptedBy: null,
+            eta: null,
+            requestedAtDate: currentDateStr,
+            requestedAtTime: currentTimeStr
+          };
+
+          farmsData.unshift(botOrder);
+          renderFarms();
+          renderFarmerOrders();
+
+          appendWaMessage('bot', `
+            <div class="space-y-1">
+              <p class="font-extrabold text-brand-green flex items-center gap-1.5">
+                <i class="fa-solid fa-circle-check text-emerald-600"></i>
+                تم استلام كافة البيانات ورفع طلبك للمنصة تلقائياً!
+              </p>
+              <div class="text-[11px] text-gray-700 bg-brand-beigeLight p-2 rounded-lg border border-brand-gold/40 mt-1">
+                <p>• <strong>نوع المخلف</strong>: سعف نخل طازج</p>
+                <p>• <strong>الوزن المسجل</strong>: 3.5 طن</p>
+                <p>• <strong>الموقع</strong>: تم تثبيت إحداثيات البوابة على الخريطة</p>
+                <p>• <strong>وقت الرفع</strong>: ${currentDateStr} (${currentTimeStr})</p>
+              </div>
+              <p class="text-[11px] text-brand-gold font-bold mt-1">
+                الطلب معروض الآن لمصانع التدوير وسنرسل لك إشعاراً برقم الشاحنة وموعد الوصول فور قبولها 🚚
+              </p>
+            </div>
+          `, 'border-r-4 border-brand-gold');
+
+          hint.innerText = "✅ اكتملت العملية وتمت إضافة الطلب تلقائياً إلى لوحة المصنع وقائمة طلباتك!";
+          btn.innerHTML = `<span><i class="fa-solid fa-arrow-left"></i> الانتقال للوحة المصنع لرؤية الطلب الجديد</span>`;
+          btn.disabled = false;
+          waStep = 4;
+        }, 1100);
+      }
+      else if (waStep === 4) {
+        switchView('factory');
+      }
+    }
+
+    window.onload = () => {
+      initMap();
+      initFarmerMap();
+      renderFarms();
+      renderFarmerOrders();
+      computeOptimalRoute();
+      updateSustainabilityKPIs();
+    };
+  </script>
+</body>
+</html>
