@@ -93,7 +93,7 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
     <div class="letter-rule" aria-hidden="true"></div>
     <p class="letter-copy" id="typedLetter" aria-hidden="true"></p>
     <p class="sr-only" id="letterAccessible">أتمنى لك سنة مليانة فرح،
-وجعلها تبطي سنينك,
+وجعلها تبطي سنينك،
 وأيام حلوة تشبهك.
 وتتحقق فيها أمنياتك،
 وحدة ورا الثانية.
@@ -131,8 +131,8 @@ var balloonWrap=document.getElementById("balloons");
   bb.style.width=(34+Math.random()*18)+"px";
   bb.style.height=(46+Math.random()*18)+"px";
   bb.style.background=bp[i%bp.length];
-  bb.style.animationDuration=(5+Math.random())+"s";
-  bb.style.animationDelay=(.55+i*.25)+"s";
+  bb.style.animationDuration=(3.2+Math.random()*.7)+"s";
+  bb.style.animationDelay=(.05+i*.08)+"s";
   bb.style.opacity=(.68+Math.random()*.12).toFixed(2);
   bb.addEventListener("animationend",function(e){if(e.animationName==="floatUp")this.remove()},{once:true});
   var bi=document.createElement("span");bb.appendChild(bi);balloonWrap.appendChild(bb);
