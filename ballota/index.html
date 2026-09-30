@@ -9,7 +9,7 @@
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#06070b;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 body{position:fixed;inset:0;background:radial-gradient(circle at 50% 42%,rgba(255,255,255,.045),transparent 30%),#06070b;color:white}
 canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
-.stage{position:fixed;inset:0;display:grid;place-items:center;padding:env(safe-area-inset-top) 14px env(safe-area-inset-bottom);pointer-events:none}
+.stage{position:fixed;inset:0;display:grid;place-items:center;padding:env(safe-area-inset-top) 14px env(safe-area-inset-bottom);pointer-events:none;z-index:3}
 .wrap{width:95vw;text-align:center;transform:translateY(-6vh)}
 .line{display:flex;justify-content:center;gap:5px;margin:5px 0;white-space:nowrap}
 .letter{display:inline-block;font-size:clamp(28px,8.1vw,72px);font-weight:900;line-height:.95;opacity:0;filter:blur(9px);transform:translate(var(--x),var(--y)) rotate(var(--r)) scale(.15);text-shadow:0 0 15px currentColor}
@@ -18,26 +18,35 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
 .namebox{margin-top:28px;opacity:0;transform:translateY(18px) scale(.95)}
 .go .namebox{animation:namein .9s cubic-bezier(.2,.8,.2,1) 3.8s forwards}
 .name{margin:0;font-size:clamp(46px,12vw,98px);font-weight:950;line-height:1;background:linear-gradient(90deg,#ffd18a,#ff91a5,#d6b2ff,#9ce6ff,#fff29b,#ffd18a);background-size:260% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 12px rgba(255,255,255,.2));animation:rainbow 4.5s linear infinite}
-.cake{font-size:clamp(30px,8vw,48px);margin-top:12px;animation:bounce 1.5s ease-in-out infinite}
-.hint{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 18px);transform:translateX(-50%);font-size:11px;letter-spacing:.18em;color:rgba(255,255,255,.42);opacity:0;transition:.4s;pointer-events:auto;padding:8px 12px}
+
+.hint{position:fixed;z-index:4;left:50%;bottom:calc(env(safe-area-inset-bottom) + 18px);transform:translateX(-50%);font-size:11px;letter-spacing:.18em;color:rgba(255,255,255,.42);opacity:0;transition:.4s;pointer-events:auto;padding:8px 12px}
 .hint.show{opacity:1}
-.star{position:fixed;width:4px;height:4px;border-radius:50%;background:#fff;box-shadow:0 0 10px #fff;opacity:.35;animation:twinkle 2s ease-in-out infinite alternate}
+.star{position:fixed;z-index:1;width:4px;height:4px;border-radius:50%;background:#fff;box-shadow:0 0 10px #fff;opacity:.35;animation:twinkle 2s ease-in-out infinite alternate}
+
+.balloons{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:2}
+.balloon{position:absolute;bottom:-190px;width:42px;height:54px;border-radius:50% 50% 46% 46%;opacity:.92;animation:floatUp linear infinite}
+.balloon::before{content:"";position:absolute;left:50%;bottom:-8px;transform:translateX(-50%);width:10px;height:10px;background:inherit;clip-path:polygon(50% 100%,0 0,100% 0)}
+.balloon::after{content:"";position:absolute;left:50%;top:52px;width:1.5px;height:90px;background:rgba(255,255,255,.45)}
+.balloon span{position:absolute;inset:0;border-radius:inherit;box-shadow:inset -8px -10px 16px rgba(0,0,0,.12),inset 6px 8px 12px rgba(255,255,255,.18)}
+@keyframes floatUp{0%{transform:translateY(0) translateX(0) rotate(0deg)}25%{transform:translateY(-25vh) translateX(12px) rotate(2deg)}50%{transform:translateY(-52vh) translateX(-10px) rotate(-3deg)}75%{transform:translateY(-78vh) translateX(10px) rotate(3deg)}100%{transform:translateY(-125vh) translateX(-8px) rotate(-2deg)}}
+
 @keyframes arrive{0%{opacity:0;filter:blur(9px);transform:translate(var(--x),var(--y)) rotate(var(--r)) scale(.15)}72%{opacity:1;filter:blur(0);transform:translate(0,0) rotate(0) scale(1.08)}100%{opacity:1;filter:blur(0);transform:translate(0,0) rotate(0) scale(1)}}
 @keyframes glow{from{text-shadow:0 0 7px currentColor}to{text-shadow:0 0 18px currentColor,0 0 30px currentColor}}
 @keyframes namein{to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes rainbow{to{background-position:260% 0}}
-@keyframes bounce{50%{transform:translateY(-8px)}}
+}
 @keyframes twinkle{from{opacity:.08;transform:scale(.5)}to{opacity:.8;transform:scale(1.2)}}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <div id="stars"></div>
+<div class="balloons" id="balloons"></div>
 <div class="stage"><div class="wrap go" id="scene">
 <div class="line" id="a"></div>
 <div class="line" id="b"></div>
 <div class="line small" id="d"></div>
-<div class="namebox"><h1 class="name">Ballota</h1><div class="cake">🎂✨</div></div>
+<div class="namebox"><h1 class="name">Ballota</h1></div>
 </div></div>
 <div class="hint" id="replay">TAP TO REPLAY</div>
 <script>
@@ -59,6 +68,23 @@ function build(){line("a","HAPPY",500);line("b","BIRTHDAY!",900);line("d","TO YO
 build();
 var sh=document.getElementById("stars");
 for(var z=0;z<24;z++){var q=document.createElement("i");q.className="star";q.style.left=Math.random()*100+"%";q.style.top=Math.random()*100+"%";q.style.animationDelay=Math.random()*2+"s";sh.appendChild(q)}
+
+var balloonWrap=document.getElementById("balloons");
+(function makeBalloons(){
+ var bp=["#ff6fa8","#ffd166","#6dd5ff","#b6ff9d","#c7a2ff","#ff9f80","#8ef5e8"];
+ for(var i=0;i<14;i++){
+  var bb=document.createElement("div");bb.className="balloon";
+  bb.style.left=(3+Math.random()*92)+"vw";
+  bb.style.width=(34+Math.random()*18)+"px";
+  bb.style.height=(46+Math.random()*18)+"px";
+  bb.style.background=bp[i%bp.length];
+  bb.style.animationDuration=(9+Math.random()*7)+"s";
+  bb.style.animationDelay=(-Math.random()*14)+"s";
+  bb.style.opacity=(.78+Math.random()*.18).toFixed(2);
+  var bi=document.createElement("span");bb.appendChild(bi);balloonWrap.appendChild(bb);
+ }
+})();
+
 var cv=document.getElementById("c"),ctx=cv.getContext("2d"),w=0,h=0,p=[],r=[],next=0;
 function size(){var d=Math.min(devicePixelRatio||1,2);w=innerWidth;h=innerHeight;cv.width=w*d;cv.height=h*d;ctx.setTransform(d,0,0,d,0,0)}addEventListener("resize",size);size();
 function col(){return colors[Math.floor(Math.random()*colors.length)]}
