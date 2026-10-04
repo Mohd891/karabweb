@@ -31,7 +31,11 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
 .balloon::after{content:"";position:absolute;left:50%;top:52px;width:1.5px;height:90px;background:rgba(255,255,255,.45)}
 .balloon span{position:absolute;inset:0;border-radius:inherit;box-shadow:inset -8px -10px 16px rgba(0,0,0,.12),inset 6px 8px 12px rgba(255,255,255,.18)}
 .balloon{pointer-events:auto;cursor:pointer;touch-action:manipulation}
-.balloon.popped{animation:none!important;opacity:0;transform:scale(1.35);transition:transform .12s ease-out,opacity .12s ease-out;pointer-events:auto}
+.pop-fragment{position:fixed;width:var(--size);height:calc(var(--size) * .72);background:var(--color);clip-path:polygon(0 0,100% 24%,73% 58%,90% 100%,12% 78%);filter:drop-shadow(0 1px 1px #0005);pointer-events:none;animation:latexSnap .58s cubic-bezier(.18,.65,.4,1) forwards}
+.pop-fragment:nth-child(even){clip-path:polygon(12% 0,91% 15%,100% 78%,47% 100%,0 64%)}
+.pop-string{position:fixed;width:1.5px;height:90px;background:rgba(255,255,255,.55);transform-origin:top;pointer-events:none;animation:stringDrop .68s ease-in forwards}
+@keyframes latexSnap{0%{opacity:1;transform:translate(0,0) rotate(0) scale(1)}28%{opacity:1}100%{opacity:0;transform:translate(var(--dx),var(--dy)) rotate(var(--turn)) scale(.55)}}
+@keyframes stringDrop{0%{opacity:.9;transform:translate(0,0) rotate(0)}100%{opacity:0;transform:translate(18px,110px) rotate(38deg)}}
 @keyframes floatUp{0%{transform:translateY(0) translateX(0) rotate(0deg)}25%{transform:translateY(calc(-25vh - 70px)) translateX(var(--x1)) rotate(var(--r1))}50%{transform:translateY(calc(-50vh - 140px)) translateX(var(--x2)) rotate(var(--r2))}75%{transform:translateY(calc(-75vh - 210px)) translateX(var(--x3)) rotate(var(--r3))}100%{transform:translateY(calc(-100vh - 280px)) translateX(var(--x4)) rotate(var(--r4))}}
 
 @keyframes arrive{0%{opacity:0;filter:blur(9px);transform:translate(var(--x),var(--y)) rotate(var(--r)) scale(.15)}72%{opacity:1;filter:blur(0);transform:translate(0,0) rotate(0) scale(1.08)}100%{opacity:1;filter:blur(0);transform:translate(0,0) rotate(0) scale(1)}}
@@ -120,26 +124,57 @@ var sh=document.getElementById("stars");
 for(var z=0;z<24;z++){var q=document.createElement("i");q.className="star";q.style.left=Math.random()*100+"%";q.style.top=Math.random()*100+"%";q.style.animationDelay=Math.random()*2+"s";sh.appendChild(q)}
 
 var balloonWrap=document.getElementById("balloons");
+var popAudioCtx;
+function playPop(){
+ try{
+  var Audio=window.AudioContext||window.webkitAudioContext;
+  if(!Audio)return;
+  popAudioCtx=popAudioCtx||new Audio();
+  if(popAudioCtx.state==="suspended")popAudioCtx.resume();
+  var duration=.075, sampleCount=Math.floor(popAudioCtx.sampleRate*duration);
+  var buffer=popAudioCtx.createBuffer(1,sampleCount,popAudioCtx.sampleRate);
+  var samples=buffer.getChannelData(0);
+  for(var i=0;i<sampleCount;i++)samples[i]=(Math.random()*2-1)*Math.pow(1-i/sampleCount,4);
+  var source=popAudioCtx.createBufferSource(),filter=popAudioCtx.createBiquadFilter(),gain=popAudioCtx.createGain();
+  source.buffer=buffer;filter.type="highpass";filter.frequency.value=450;gain.gain.value=.13;
+  source.connect(filter);filter.connect(gain);gain.connect(popAudioCtx.destination);
+  source.start();source.stop(popAudioCtx.currentTime+duration);
+ }catch(err){}
+}
+function showBalloonPop(rect,color){
+ var cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
+ for(var i=0;i<9;i++){
+  var angle=2*Math.PI*i/9+(Math.random()-.5)*.3;
+  var piece=document.createElement("i"),distance=32+Math.random()*46;
+  piece.className="pop-fragment";
+  piece.style.left=(cx+Math.cos(angle)*rect.width*.32)+"px";
+  piece.style.top=(cy+Math.sin(angle)*rect.height*.32)+"px";
+  piece.style.setProperty("--size",(6+Math.random()*9)+"px");
+  piece.style.setProperty("--color",color);
+  piece.style.setProperty("--dx",(Math.cos(angle)*distance)+"px");
+  piece.style.setProperty("--dy",(Math.sin(angle)*distance+28+Math.random()*26)+"px");
+  piece.style.setProperty("--turn",((-1+Math.random()*2)*220)+"deg");
+  piece.style.filter="brightness("+(0.68+Math.random()*.58)+") drop-shadow(0 1px 1px #0005)";
+  piece.addEventListener("animationend",function(){this.remove()},{once:true});
+  balloonWrap.appendChild(piece);
+ }
+ var string=document.createElement("i");string.className="pop-string";
+ string.style.left=cx+"px";string.style.top=(rect.bottom-3)+"px";
+ string.addEventListener("animationend",function(){this.remove()},{once:true});
+ balloonWrap.appendChild(string);
+}
 function popBalloon(e){
  var b=e.currentTarget;
+ e.preventDefault();e.stopPropagation();
  if(b.dataset.popped==="1")return;
  b.dataset.popped="1";
- e.preventDefault();
- e.stopPropagation();
- var rect=b.getBoundingClientRect(),cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
- var bc=getComputedStyle(b).backgroundColor;
- burst(cx,cy,bc,.68);
- b.style.animation="none";
- b.style.position="fixed";
- b.style.left=rect.left+"px";
- b.style.top=rect.top+"px";
- b.style.bottom="auto";
- b.style.width=rect.width+"px";
- b.style.height=rect.height+"px";
- requestAnimationFrame(function(){
-  b.classList.add("popped");
-  setTimeout(function(){b.remove()},600);
- });
+ var rect=b.getBoundingClientRect(),color=getComputedStyle(b).backgroundColor;
+ showBalloonPop(rect,color);playPop();
+ b.style.animation="none";b.style.transition="none";
+ b.style.position="fixed";b.style.left=rect.left+"px";b.style.top=rect.top+"px";
+ b.style.bottom="auto";b.style.width=rect.width+"px";b.style.height=rect.height+"px";
+ b.style.opacity="0";
+ setTimeout(function(){b.remove()},1000);
 }
 function makeBalloons(){
  balloonWrap.replaceChildren();
