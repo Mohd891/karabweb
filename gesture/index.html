@@ -121,7 +121,7 @@ function loop(now){
   }
   const result=handDetector.detectForVideo(video,now),hands=result.landmarks.map(hand=>hand.map(p=>({x:p.x*w,y:p.y*h})));draw(hands);
   const raw=classify(hands,face);if(raw!==candidate){candidate=raw;candidateSince=now}else if(now-candidateSince>=65)showGesture(raw);
-  $('tracking').textContent=hands.length?`تم التعرّف على ${hands.length===1?'يد واحدة':'يدين'}`:'خلّ يدك داخل الكادر';
+  $('tracking').textContent=hands.length?`تم التعرّف على ${hands.length===1?'يد واحدة':'يدين'}`:'خلّ يدك داخل الكاميرا';
  }}catch(e){halt();message('توقّف التعرّف. جرّب تشغيل الكاميرا مرة ثانية.',true);console.error(e);return}
  raf=requestAnimationFrame(loop);
 }
