@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ميم على حركتك</title><meta name="description" content="شغّل الكاميرا وجرّب ميمات حركات اليد.">
+<title>ميمز</title><meta name="description" content="شغّل الكاميرا وجرّب ميمات حركات اليد.">
 <meta name="theme-color" content="#111214">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23b783ff'/%3E%3Ctext x='32' y='46' text-anchor='middle' font-size='42'%3E✌%3C/text%3E%3C/svg%3E">
 <link rel="modulepreload" href="assets/vision_bundle.mjs">
@@ -11,7 +11,7 @@
 </head>
 <body>
 <div class="app">
-<header><a class="brand" href="./"><span class="brand-mark">✌</span> ميم على حركتك</a><span class="edition">٨ حركات · ٨ ميمز</span></header>
+<header><a class="brand" href="./"><span class="brand-mark">✌</span> ميمز</a><span class="edition">٨ حركات · ٨ ميمز</span></header>
 <main>
 <div class="intro"><p>شغّل الكاميرا، وخلّ يدك واضحة قدامها.</p></div>
 <div class="stage">
@@ -28,7 +28,7 @@
 </div>
 <section class="guide" aria-labelledby="guide-title"><div class="guide-heading"><h2 id="guide-title">جرّب الحركات</h2></div><div class="gestures" id="gestures"></div></section>
 </main>
-</div><script type="module">const gestures=[{id:'neutral',name:'عادي',emoji:'😐'},{id:'point',name:'الاولى',emoji:'☝️'},{id:'shush',name:'اصه',emoji:'🤫'},{id:'shy',name:'خجول',emoji:'👉👈'},{id:'punch',name:'قبضة',emoji:'👊'},{id:'shaka',name:'كوول مي',emoji:'🤙'},{id:'peace',name:'حبتين',emoji:'✌️'},{id:'salute',name:'تحية',emoji:'🫡'}];
+</div><script type="module">const gestures=[{id:'neutral',name:'عادي',emoji:'😐'},{id:'point',name:'الاول',emoji:'☝️'},{id:'shush',name:'اصه',emoji:'🤫'},{id:'shy',name:'خجول',emoji:'👉👈'},{id:'punch',name:'بقس',emoji:'👊'},{id:'shaka',name:'كوول مي',emoji:'🤙'},{id:'peace',name:'حبتين',emoji:'✌️'},{id:'salute',name:'تحية',emoji:'🫡'}];
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 function fingers(p){return [[8,6],[12,10],[16,14],[20,18]].map(([tip,pip])=>distance(p[tip],p[0])>distance(p[pip],p[0])*1.1)}
 function classify(hands,face){
@@ -72,34 +72,43 @@ async function createDetector(Type,files,bytes,options){
  try{return await Type.createFromOptions(files,{...options,baseOptions:{modelAssetBuffer:bytes,delegate:'GPU'}})}
  catch{return Type.createFromOptions(files,{...options,baseOptions:{modelAssetBuffer:bytes,delegate:'CPU'}})}
 }
+let assetPreparation=null;
+function prepareAssets(){
+ if(!assetPreparation)assetPreparation=Promise.all([
+  import('./assets/vision_bundle.mjs'),
+  modelBytes('./assets/hand_landmarker.task'),
+  modelBytes('./assets/face_detector.tflite')
+ ]).catch(e=>{assetPreparation=null;throw e});
+ return assetPreparation;
+}
 async function models(){
  if(handDetector)return;
  if(!loading)loading=(async()=>{
-  // Download the library and both models together, before the camera is requested.
-  const faceBytes=modelBytes('./assets/face_detector.tflite');
-  faceBytes.catch(()=>{});
-  const [{FilesetResolver,HandLandmarker,FaceDetector},handBytes]=await Promise.all([
-   import('./assets/vision_bundle.mjs'),modelBytes('./assets/hand_landmarker.task')
-  ]);
+  const [{FilesetResolver,HandLandmarker,FaceDetector},handBytes,faceBytes]=await prepareAssets();
   const files=await FilesetResolver.forVisionTasks('./assets/wasm');
   handDetector=await createDetector(HandLandmarker,files,handBytes,{runningMode:'VIDEO',numHands:2,minHandDetectionConfidence:.6,minHandPresenceConfidence:.5,minTrackingConfidence:.6});
-  // The ordinary hand gestures can start immediately; face gestures join when ready.
-  faceLoading=(async()=>{
-   faceDetector=await createDetector(FaceDetector,files,await faceBytes,{runningMode:'VIDEO',minDetectionConfidence:.5});
-  })().catch(e=>{faceLoading=null;console.error('Face model unavailable',e);if(running)message('الحركات جاهزة؛ تعذّر تجهيز حركة التحية واصه. أعد فتح الصفحة للمحاولة.')});
+  faceLoading=createDetector(FaceDetector,files,faceBytes,{runningMode:'VIDEO',minDetectionConfidence:.5})
+   .then(detector=>{faceDetector=detector})
+   .catch(e=>{faceLoading=null;console.error('Face model unavailable',e);if(running)message('الحركات جاهزة؛ تعذّر تجهيز حركة التحية واصه. أعد فتح الصفحة للمحاولة.')});
  })().catch(e=>{loading=null;throw e});
  await loading;
 }
 async function begin(){
  if(running||starting)return;
  if(!navigator.mediaDevices?.getUserMedia){message('افتح الرابط في Safari أو Chrome للسماح بالكاميرا.',true);return}
- starting=true;const token=++generation;const preparation=models();preparation.catch(()=>{});start.disabled=true;start.textContent='جاري التجهيز…';message('اسمح بالكاميرا، وبعدها نجهّز التعرّف على الحركات.');
+ starting=true;const token=++generation;start.disabled=true;start.textContent='جاري التجهيز…';message('اسمح بالكاميرا، وبعدها نجهّز التعرّف على الحركات.');
  try{
-  const acquired=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});
+  const acquired=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:480},height:{ideal:360},frameRate:{ideal:24,max:30}},audio:false});
   if(token!==generation){acquired.getTracks().forEach(t=>t.stop());return}
   stream=acquired;
-  video.srcObject=stream;await video.play();$('camera-empty').hidden=true;stop.hidden=false;
-  message('جاري تجهيز الحركات…');await preparation;
+  video.muted=true;video.playsInline=true;video.autoplay=true;video.srcObject=stream;await video.play();
+  if(token!==generation)return;
+  $('camera-empty').hidden=true;stop.hidden=false;start.hidden=true;
+  message('الكاميرا شغالة، جاري تجهيز الحركات…');
+  // Let the camera paint before starting any GPU/WASM initialization.
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  if(token!==generation)return;
+  await models();
   if(token!==generation)return;
   running=true;lastVideo=-1;lastTick=0;face=null;candidate='neutral';candidateSince=performance.now();start.hidden=true;message('جاهز! جرّب حركة يدك.');
   stream.getVideoTracks()[0].addEventListener('ended',()=>{halt();message('الكاميرا توقفت. شغّلها مرة ثانية.')},{once:true});
@@ -126,7 +135,7 @@ function loop(now){
  raf=requestAnimationFrame(loop);
 }
 function draw(hands){ctx.clearRect(0,0,canvas.width,canvas.height);const links=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];ctx.strokeStyle='#b783ff';ctx.fillStyle='#b783ff';ctx.lineWidth=2;for(const hand of hands){for(const [a,b]of links){ctx.beginPath();ctx.moveTo(hand[a].x,hand[a].y);ctx.lineTo(hand[b].x,hand[b].y);ctx.stroke()}for(const p of hand){ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fill()}}}
-setTimeout(()=>{models().catch(()=>{})},250);
+setTimeout(()=>{prepareAssets().catch(()=>{})},250);
 start.addEventListener('click',begin);stop.addEventListener('click',halt);document.addEventListener('visibilitychange',()=>{if(document.hidden&&(running||starting))halt()});window.addEventListener('pagehide',halt);
 // Agents can read the same visible state and stop an active camera.
 if(document.modelContext?.registerTool){const lifetime=new AbortController();for(const tool of [{name:'read_gesture_state',description:'Read the current visible gesture and camera state.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},execute(input){if(!input||Object.keys(input).length)throw new Error('No arguments expected');return{gesture:current,cameraRunning:running,status:status.textContent}}},{name:'stop_camera',description:'Stop the camera and return the visible meme to neutral.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:false},execute(input){if(!input||Object.keys(input).length)throw new Error('No arguments expected');halt();return{cameraRunning:false,gesture:current}}}])try{Promise.resolve(document.modelContext.registerTool(tool,{signal:lifetime.signal})).catch(()=>{})}catch{}window.addEventListener('pagehide',()=>lifetime.abort(),{once:true})}
