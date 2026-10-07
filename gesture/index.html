@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ميم على حركتك</title><meta name="description" content="شغّل الكاميرا وسوّ الحركة. الميم يتغيّر معك!">
+<meta name="theme-color" content="#111214">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23d2ff52'/%3E%3Ctext x='32' y='46' text-anchor='middle' font-size='42'%3E✌%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+<header><a class="brand" href="./"><span class="brand-mark">✌</span> ميم على حركتك</a><span class="edition">٨ حركات · ٨ ميمز</span></header>
+<main>
+<div class="intro"><h1>سوّ الحركة.<br><span>خلّ الميم يردّ.</span></h1><p>شغّل الكاميرا، وخلّ يدك واضحة قدامها.</p></div>
+<div class="stage">
+<section class="meme-panel" aria-label="الميم الحالي">
+<div class="panel-top"><span>الميم</span><span id="gesture-label" aria-live="polite">😐 عادي</span></div>
+<div class="meme-frame"><img id="meme" src="assets/neutral.jpg" alt="ميم الوضع العادي" fetchpriority="high"></div>
+<div class="panel-bottom"><span id="tracking">بانتظار حركتك</span><span class="counter" id="gesture-count">01 / 08</span></div>
+</section>
+<section class="camera-panel" aria-label="الكاميرا">
+<div class="camera-wrap"><video id="camera" playsinline muted autoplay></video><canvas id="overlay" aria-hidden="true"></canvas><div class="camera-empty" id="camera-empty"><span class="camera-icon">◎</span><p>هنا تطلع حركتك</p></div><span class="camera-tag">الكاميرا</span></div>
+<div class="camera-controls"><button id="start" class="primary" type="button">تشغيل الكاميرا</button><button id="stop" class="secondary" type="button" hidden>إيقاف الكاميرا</button><p id="status" role="status">اسمح للكاميرا عشان تبدأ.</p><p class="privacy">الكاميرا تشتغل على جهازك فقط، بدون تسجيل أو رفع الفيديو.</p></div>
+<div class="tip"><span>🫡</span><p>للتحية: افتح أصابعك وقرّبها من طرف الجبهة. وللخجل: قرّب السبابتين من بعض.</p></div>
+</section>
+</div>
+<section class="guide" aria-labelledby="guide-title"><div class="guide-heading"><h2 id="guide-title">جرّب الحركات</h2><p>ثبّت كل حركة لحظة</p></div><div class="gestures" id="gestures"></div></section>
+</main><footer>إضاءة واضحة + يد داخل الكادر = تعرّف أفضل</footer>
+</div><script type="module" src="app.js"></script>
+</body></html>
